@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
- 
+
 # ===================================================================
 # Ampliación de Inteligencia Artificial
 # Implementación de clasificadores 
@@ -73,7 +73,7 @@
 # * Datos de la Universidad de Wisconsin sobre posible imágenes de cáncer de
 #   mama, en función de una serie de características calculadas a partir de la
 #   imagen del tumor. Se carga en las variables X_cancer, y_cancer.
-  
+
 # * Críticas de cine en IMDB, clasificadas como positivas o negativas. El
 #   conjunto de datos que usaremos es sólo una parte de los textos. Los textos
 #   se han vectorizado usando CountVectorizer de Scikit Learn, con la opción
@@ -90,17 +90,6 @@
 #   base de datos MNIST. En digitdata.zip están todos los datos en formato
 #   comprimido. Para preparar estos datos habrá que escribir funciones que los
 #   extraigan de los ficheros de texto (más adelante se dan más detalles). 
-
-
-
-
-
-
-
-
-
-
-
 
 
 # ==================================================
@@ -163,19 +152,19 @@
 # (array(['conceder', 'estudiar', 'no conceder'], dtype='<U11'),
 #  array([81, 91, 88]))
 # ------------------------------------------------------------------
+import numpy as np
+import carga_datos
 
 
-
-
-
-
-
-
-
-
-
-
-
+def particion_entr_prueba(X, y, test=0.20):
+    zipped = np.asarray([x for x in zip(X, y)])
+    np.random.shuffle(zipped)
+    punto = int(len(X) * test)
+    x_train = np.asarray([x[0] for x in zipped[punto:]])
+    y_train = np.asarray([x[1] for x in zipped[punto:]])
+    x_test = np.asarray([x[0] for x in zipped[:punto]])
+    y_test = np.asarray([x[1] for x in zipped[:punto]])
+    return x_train, x_test, y_train, y_test
 
 
 # ========================================================
@@ -201,7 +190,7 @@
 #     def __init__(self,k=1):
 #                 
 #          .....
-         
+
 #     def entrena(self,X,y):
 
 #         ......
@@ -213,6 +202,44 @@
 #     def clasifica(self,ejemplo):
 
 #         ......
+
+class NaiveBayes():
+    # prob de las clases v1, v2... teniendo los atributos a1, a2, a3...
+    def __init__(self, k=1):
+        self.pvj = dict()
+        self.pav = dict()
+        self.clases = []
+        self.num_atribs = 0
+        self.num_ejem = 0
+        self.atribs = []
+        self.probabilidades = dict()
+        self.k = k
+    def entrena(self, X, y):
+            self.clases = np.unique(y)
+            self.num_atribs = len(X[0])
+            self.num_ejem = len(X)
+            self.atribs = [np.unique(X[:, i]) for i in range(self.num_atribs)]
+            for n, v in enumerate(self.clases):
+                listapvj = [X[i] for i in range(len(X)) if y[i]==v]
+                self.pvj[v] = len(listapvj)/self.num_ejem
+                for m, i in enumerate(self.atribs):
+                    for j in i:
+                        listapav = [x for x in listapvj if x[m]==j]
+                        self.pav[(j,v)] = (len(listapav)+self.k)/(len(listapvj)+self.k*len(i))
+
+    def clasifica_prob(self, ejemplo):
+        for c in self.clases:
+            probv = self.pvj[c]
+            lista = np.asarray([self.pav[(x, c)] for x in ejemplo])
+            prob = probv*np.prod(lista) #TODO: usar log probabilidades
+            self.probabilidades[c] = prob
+        suma = np.sum(list(self.probabilidades.values()))
+        for x in self.probabilidades:
+            self.probabilidades[x] = self.probabilidades[x]/suma
+        return self.probabilidades
+    def clasifica(self, ejemplo):
+        return max(self.clasifica_prob( ejemplo), key=self.clasifica_prob( ejemplo).get)
+
 
 
 # * El constructor recibe como argumento la constante k de suavizado (por
@@ -235,24 +262,18 @@ class ClasificadorNoEntrenado(Exception): pass
 
 # ------------------------------------------------------------------------------
 # Ejemplo "jugar al tenis":
+X_tenis = carga_datos.X_tenis
+y_tenis = carga_datos.y_tenis
+nb_tenis=NaiveBayes(k=0.5)
+nb_tenis.entrena(X_tenis,y_tenis)
+print(nb_tenis.pav, nb_tenis.pvj)
 
-# >>> nb_tenis=NaiveBayes(k=0.5)
-# >>> nb_tenis.entrena(X_tenis,y_tenis)
-# >>> ej_tenis=np.array(['Soleado','Baja','Alta','Fuerte'])
-# >>> nb_tenis.clasifica_prob(ej_tenis)
+ej_tenis=np.array(['Soleado','Baja','Alta','Fuerte'])
+print(nb_tenis.clasifica_prob(ej_tenis))
 # {'no': 0.7564841498559081, 'si': 0.24351585014409202}
-# >>> nb_tenis.clasifica(ej_tenis)
+print(nb_tenis.clasifica(ej_tenis))
 # 'no'
 # ------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
 
 
 # ----------------------------------------------
@@ -271,12 +292,6 @@ class ClasificadorNoEntrenado(Exception): pass
 # ------------------------------------------------------------------------------
 
 
-
-
-
-
-
-
 # --------------------------
 # 2.3) Aplicando Naive Bayes
 # --------------------------
@@ -293,18 +308,6 @@ class ClasificadorNoEntrenado(Exception): pass
 # para ello la función particion_entr_prueba anterior). Ajustar también el
 # valor del parámetro de suavizado k. Mostrar el proceso realizado en cada
 # caso, y los rendimientos obtenidos.  
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # =================================================
@@ -346,7 +349,7 @@ class ClasificadorNoEntrenado(Exception): pass
 # El resultado es la media de rendimientos obtenidos entrenando cada vez con
 # todas las particiones menos una, y probando el rendimiento con la parte que
 # se ha dejado fuera. 
- 
+
 # Si decidimos que es es un buen rendimiento (comparando con lo obtenido para
 # otros valores de k), finalmente entrenaríamos con el conjunto de
 # entrenamiento completo:
@@ -359,19 +362,7 @@ class ClasificadorNoEntrenado(Exception): pass
 # >>> rendimiento(nb01,Xp_votos,yp_votos)
 #  0.88195402298850575
 
-#------------------------------------------------------------------------------
-
-
-
-
-
-
-
-
-
-
-
-
+# ------------------------------------------------------------------------------
 
 
 # ========================================================
@@ -399,7 +390,7 @@ class ClasificadorNoEntrenado(Exception): pass
 #                 pesos_iniciales=None):
 
 #         .....
-        
+
 #     def entrena(self,X,y):
 
 #         .....        
@@ -407,12 +398,11 @@ class ClasificadorNoEntrenado(Exception): pass
 #     def clasifica_prob(self,ejemplo):
 
 #         ......
-    
+
 #     def clasifica(self,ejemplo):
-                        
+
 #          ......
 
-        
 
 # Explicamos a continuación cada uno de estos elementos:
 
@@ -493,14 +483,6 @@ class ClasificadorNoEntrenado(Exception): pass
 # -----------------------------------------------------------------
 
 
-
-
-
-
-
-
-
-
 # -----------------------------------
 # 4.2) Aplicando Regresión Logística 
 # -----------------------------------
@@ -518,26 +500,6 @@ class ClasificadorNoEntrenado(Exception): pass
 # el ajuste (si no, usar el "holdout" del ejercicio 1). 
 
 # Mostrar el proceso realizado en cada caso, y los rendimientos finales obtenidos. 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # =====================================
@@ -571,8 +533,6 @@ class ClasificadorNoEntrenado(Exception): pass
 #     def clasifica(self,ejemplo):
 
 #        ......
-            
-
 
 
 #  Los parámetros de los métodos significan lo mismo que en el apartado
@@ -624,5 +584,4 @@ class ClasificadorNoEntrenado(Exception): pass
 
 # Ajustar los parámetros de tamaño de batch, tasa de aprendizaje y
 # rate_decay para tratar de obtener un rendimiento aceptable (por encima del
-# 75% de aciertos sobre test). 
-
+# 75% de aciertos sobre test).
