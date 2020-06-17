@@ -9,15 +9,13 @@
 
 
 # --------------------------------------------------------------------------
-# Autor(a) del trabajo:
+# Autores del trabajo:
 #
-# APELLIDOS:
-# NOMBRE: 
+# APELLIDOS: Barragán Rodríguez
+# NOMBRE: Emilio
 #
-# Segundo componente (si se trata de un grupo):
-#
-# APELLIDOS:
-# NOMBRE:
+# APELLIDOS: Sánchez Alanís
+# NOMBRE: Jesús Manuel
 # ----------------------------------------------------------------------------
 
 
@@ -154,17 +152,30 @@
 # ------------------------------------------------------------------
 import numpy as np
 import carga_datos
+import math
 
 
 def particion_entr_prueba(X, y, test=0.20):
-    zipped = np.asarray([x for x in zip(X, y)])
+    zipped = np.array([x for x in zip(X, y)])
     np.random.shuffle(zipped)
-    punto = int(len(X) * test)
-    x_train = np.asarray([x[0] for x in zipped[punto:]])
-    y_train = np.asarray([x[1] for x in zipped[punto:]])
-    x_test = np.asarray([x[0] for x in zipped[:punto]])
-    y_test = np.asarray([x[1] for x in zipped[:punto]])
-    return x_train, x_test, y_train, y_test
+    y_unicos = np.unique(y)
+    x_train = []
+    y_train = []
+    x_test = []
+    y_test = []
+    lista = []
+    punto = int(len(X) * test / len(y_unicos))
+    for i in y_unicos:
+        lista.append([x for x in zipped if x[1] == i])
+    for z in lista:
+        x_train.append([x[0] for x in z[punto:]])
+        y_train.append([x[1] for x in z[punto:]])
+        x_test.append([x[0] for x in z[:punto]])
+        y_test.append([x[1] for x in z[:punto]])
+    return np.array([x[i] for x in x_train for i in range(len(x))]), \
+           np.array([x[i] for x in x_test for i in range(len(x))]), \
+           np.array([y[i] for y in y_train for i in range(len(y))]), \
+           np.array([y[i] for y in y_test for i in range(len(y))])
 
 
 # ========================================================
@@ -203,8 +214,7 @@ def particion_entr_prueba(X, y, test=0.20):
 
 #         ......
 
-class NaiveBayes():
-    # prob de las clases v1, v2... teniendo los atributos a1, a2, a3...
+class NaiveBayes:
     def __init__(self, k=1):
         self.pvj = dict()
         self.pav = dict()
@@ -214,32 +224,36 @@ class NaiveBayes():
         self.atribs = []
         self.probabilidades = dict()
         self.k = k
+
     def entrena(self, X, y):
-            self.clases = np.unique(y)
-            self.num_atribs = len(X[0])
-            self.num_ejem = len(X)
-            self.atribs = [np.unique(X[:, i]) for i in range(self.num_atribs)]
-            for n, v in enumerate(self.clases):
-                listapvj = [X[i] for i in range(len(X)) if y[i]==v]
-                self.pvj[v] = len(listapvj)/self.num_ejem
-                for m, i in enumerate(self.atribs):
-                    for j in i:
-                        listapav = [x for x in listapvj if x[m]==j]
-                        self.pav[(j,v)] = (len(listapav)+self.k)/(len(listapvj)+self.k*len(i))
+        self.clases = np.unique(y)
+        self.num_atribs = len(X[0])
+        self.num_ejem = len(X)
+        self.atribs = [np.unique(X[:, i]) for i in range(self.num_atribs)]
+        for n, v in enumerate(self.clases):
+            listapvj = [X[i] for i in range(len(X)) if y[i] == v]
+            self.pvj[v] = np.log(len(listapvj) / self.num_ejem)
+            for m, i in enumerate(self.atribs):
+                for j in i:
+                    listapav = [x for x in listapvj if x[m] == j]
+                    self.pav[(m, j, v)] = np.log((len(listapav) + self.k) / (len(listapvj) + self.k * len(i)))
 
     def clasifica_prob(self, ejemplo):
         for c in self.clases:
             probv = self.pvj[c]
-            lista = np.asarray([self.pav[(x, c)] for x in ejemplo])
-            prob = probv*np.prod(lista) #TODO: usar log probabilidades
-            self.probabilidades[c] = prob
+            lista = np.asarray([self.pav[(n, x, c)] for n, x in enumerate(ejemplo)])
+            prob = probv + np.sum(lista)  # TODO: usar log probabilidades
+            self.probabilidades[c] = math.exp(prob)
         suma = np.sum(list(self.probabilidades.values()))
         for x in self.probabilidades:
-            self.probabilidades[x] = self.probabilidades[x]/suma
+            self.probabilidades[x] = self.probabilidades[x] / suma
         return self.probabilidades
-    def clasifica(self, ejemplo):
-        return max(self.clasifica_prob( ejemplo), key=self.clasifica_prob( ejemplo).get)
 
+    def clasifica(self, ejemplo):
+        if self.pvj == dict():
+            raise ClasificadorNoEntrenado
+        probs = self.clasifica_prob(ejemplo)
+        return max(probs, key=probs.get)
 
 
 # * El constructor recibe como argumento la constante k de suavizado (por
@@ -257,21 +271,26 @@ class NaiveBayes():
 # Si se llama a los métodos de clasificación antes de entrenar el modelo, se
 # debe devolver (con raise) una excepción:
 
-class ClasificadorNoEntrenado(Exception): pass
+class ClasificadorNoEntrenado(Exception):
+    def __str__(self):
+        return "Modelo no entrenado"
 
 
 # ------------------------------------------------------------------------------
 # Ejemplo "jugar al tenis":
-X_tenis = carga_datos.X_tenis
-y_tenis = carga_datos.y_tenis
-nb_tenis=NaiveBayes(k=0.5)
-nb_tenis.entrena(X_tenis,y_tenis)
-print(nb_tenis.pav, nb_tenis.pvj)
+#X_tenis = carga_datos.X_tenis
+#y_tenis = carga_datos.y_tenis
+#nb_tenis = NaiveBayes(k=0.5)
+#x_train_tenis, x_test_tenis, y_train_tenis, y_test_tenis = particion_entr_prueba(X_tenis, y_tenis)
+#nb_tenis.entrena(X_tenis, y_tenis)
 
-ej_tenis=np.array(['Soleado','Baja','Alta','Fuerte'])
-print(nb_tenis.clasifica_prob(ej_tenis))
+
+#print(nb_tenis.pav)
+
+ej_tenis = np.array(['Soleado', 'Baja', 'Alta', 'Fuerte'])
+#print(nb_tenis.clasifica_prob(ej_tenis))
 # {'no': 0.7564841498559081, 'si': 0.24351585014409202}
-print(nb_tenis.clasifica(ej_tenis))
+#print(nb_tenis.clasifica(ej_tenis))
 # 'no'
 # ------------------------------------------------------------------------------
 
@@ -282,12 +301,22 @@ print(nb_tenis.clasifica(ej_tenis))
 
 # Definir una función "rendimiento(clasificador,X,y)" que devuelve la
 # proporción de ejemplos bien clasificados (accuracy) que obtiene el
-# clasificador sobre un conjunto de ejemplos X con clasificación esperada y. 
+# clasificador sobre un conjunto de ejemplos X con clasificación esperada y.
+
+def rendimiento(clasificador, X, y):
+    predicciones = np.array([clasificador.clasifica(Xi) for Xi in X])
+    num_predicciones = len(predicciones)
+    bien = predicciones == y
+    num_bien = len(bien[bien == True])
+    return num_bien / num_predicciones
+
 
 # ------------------------------------------------------------------------------
 # Ejemplo:
 
-# >>> rendimiento(nb_tenis,X_tenis,y_tenis)
+#print(rendimiento(nb_tenis, X_tenis, y_tenis))
+
+
 # 0.9285714285714286
 # ------------------------------------------------------------------------------
 
@@ -307,8 +336,59 @@ print(nb_tenis.clasifica(ej_tenis))
 # prueba, para dar la valoración final de los clasificadores obtenidos (usar
 # para ello la función particion_entr_prueba anterior). Ajustar también el
 # valor del parámetro de suavizado k. Mostrar el proceso realizado en cada
-# caso, y los rendimientos obtenidos.  
+# caso, y los rendimientos obtenidos.
 
+def rendimiento_k(x_train, y_train, max_k=10, min_k=0.5, k_step=0.5, x_test=[], y_test=[], test=0.1):
+
+    if(type(x_test) is list):
+        if(type(y_test) is not list):
+            raise Exception("Falta x_test")
+        x_train, x_test, y_train, y_test = particion_entr_prueba(x_train, y_train, test)
+
+    elif (type(y_test) is list):
+        if (type(x_test) is not list):
+            raise Exception("Falta y_test")
+        x_train, x_test, y_train, y_test = particion_entr_prueba(x_train, y_train, test)
+
+    x_train, x_val, y_train, y_val = particion_entr_prueba(x_train, y_train,test)
+    mejor = (0, 0)
+    for i in np.arange(min_k, max_k, k_step):
+        #print("k={}".format(i))
+        nb = NaiveBayes(k=i)
+        nb.entrena(x_train, y_train)
+        actual = rendimiento(nb, x_val, y_val)
+        #print("Rendimiento: {}".format(actual))
+        if actual > mejor[1]:
+            mejor = (i, actual)
+            mejor_modelo = nb
+    print("El mejor valor de k: ", mejor[0])
+    print("Rendimiento sobre validación: ", mejor[1])
+    print("Rendimiento sobre test: ", rendimiento(mejor_modelo, x_test, y_test))
+
+#print("RENDIMIENTO VOTOS")
+#print("----------------------------")
+#X_votos = carga_datos.X_votos
+#y_votos = carga_datos.y_votos
+
+#rendimiento_k(X_votos, y_votos)
+#print()
+
+#print("RENDIMIENTO PRÉSTAMOS")
+#print("----------------------------")
+#X_credito = carga_datos.X_credito
+#y_credito = carga_datos.y_credito
+
+#rendimiento_k(X_credito, y_credito)
+#print()
+
+#print("RENDIMIENTO CINE")
+#print("----------------------------")
+#x_train_cine = np.load('/home/theesmox/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/vect_train_text.npy')
+#y_train_cine = np.load('/home/theesmox/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/y_train_text.npy')
+#x_test_cine = np.load('/home/theesmox/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/vect_test_text.npy')
+#y_test_cine = np.load('/home/theesmox/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/y_test_text.npy')
+
+#rendimiento_k(x_train_cine, y_train_cine, x_test=x_test_cine, y_test=y_test_cine)
 
 # =================================================
 # EJERCICIO 3: IMPLEMENTACIÓN DE VALIDACIÓN CRUZADA
