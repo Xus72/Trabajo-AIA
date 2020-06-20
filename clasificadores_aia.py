@@ -513,17 +513,99 @@ def rendimiento_k(x_train, y_train, max_k=10, min_k=0.5, k_step=0.5, x_test=None
 
 # En concreto se pide implementar una clase: 
 
-# class RegresionLogisticaMiniBatch():
+class RegresionLogisticaMiniBatch():
 
-#    def __init__(self,clases=[0,1],normalizacion=False,
-#                 rate=0.1,rate_decay=False,batch_tam=64,n_epochs=200,
-#                 pesos_iniciales=None):
+    def __init__(self,clases=[0,1],normalizacion=False,
+                 rate=0.1,rate_decay=False,batch_tam=64,n_epochs=200,
+                 pesos_iniciales=None):
 
-#         .....
+        self.clases = clases
+        self.normalizacion = normalizacion
+        self.rate = rate
+        self.rate_decay = rate_decay
+        self.rate_d = (rate)*(1/(1+n_epochs))
+        self.batch_tam = batch_tam
+        self.n_epochs = n_epochs
+    
+    def sigmoide(x):
+        return expit(x)
 
-#     def entrena(self,X,y):
+    def normalization(self,X,y):
+        
+        X_normalizado = np.zeros(shape=X.shape)
+        y_normalizado = np.zeros(shape=y.shape)
 
-#         .....        
+        for i in range(len(X)):
+            suma_total = 0
+            suma_dist = 0
+            desv_tipica = 0
+            for j in range(len(X[i])):
+                suma_total += X[i][j]
+            media = suma_total/len(X[i])
+            for j in range(len(X[i])):
+                suma_dist += abs(X[i][j] - media)**2
+            desv_tipica = math.sqrt(suma_dist/len(X[i]))
+            for j in range(len(X[i])):
+                X_normalizado[i][j] = (X[i][j] - media)/desv_tipica
+        
+        suma_total = 0
+        suma_dist = 0
+        desv_tipica = 0
+        media = 0
+        
+        for i in range(len(y)):
+            suma_total += y[i]
+        media = suma_total/len(y)
+
+        for i in range(len(y)):          
+            suma_dist += abs(y[i]- media)**2
+        desv_tipica = math.sqrt(suma_dist/len(y))
+
+        for i in range(len(y)):
+            y_normalizado[i] = (y[i]- media)/desv_tipica
+        return X_normalizado, y_normalizado
+        
+    def mini_batch(self,X,y):
+        indices = list(range(len(X)))
+        indices = random.shuffle(indices)
+        list_X_batch = []
+        list_y_batch = []
+        for i in range(0, X.shape[0], self.batch_tam):
+            # Get pair of (X, y) of the current minibatch/chunk
+            list_X_batch.append(X[i:i + self.batch_tam])
+            list_y_batch.append(y[i:i + self.batch_tam])
+        return list_X_batch, list_y_batch
+
+    def entrena(self,X,y):
+
+        X_normalizado = []
+        y_normalizado = []
+        
+        if self.normalizacion == True:
+            X_normalizado,y_normalizado = self.normalization(X,y)
+        else:
+            X_normalizado,y_normalizado = X,y
+
+        #n_epochs
+        n_epochs = self.n_epochs
+        clases = np.unique(y)
+        n_atributos = len(X_normalizado[0])
+        n_ejemplos = len(X_normalizado)
+        w = np.zeros(shape=np.shape(X))
+        for n in range(n_epochs):
+            list_X_mini, list_y_mini = self.mini_batch(X, y)
+            for i in range(len(list_X_mini)):
+                X_mini = [x for x in list_X_mini[i]]
+                y_mini = [y for y in list_y_mini[i]]
+                for j in range(len(X_mini)):
+                    for z in range(len(X_mini[j])):
+                        print(X_mini[j][z])
+                        if self.rate_decay == True:    
+                            w[j] += self.rate_d*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
+                        else:
+                            w[j] += self.rate*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
+                    #error_cuadratico = error_cuadratico_medio(x,y_train,w)
+        return w
 
 #     def clasifica_prob(self,ejemplo):
 
