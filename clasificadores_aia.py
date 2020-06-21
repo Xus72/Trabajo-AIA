@@ -523,11 +523,12 @@ class RegresionLogisticaMiniBatch():
         self.normalizacion = normalizacion
         self.rate = rate
         self.rate_decay = rate_decay
-        self.rate_d = (rate)*(1/(1+n_epochs))
+        self.rate_d = 0
+        self.rate_d += (rate)*(1/(1+n_epochs))
         self.batch_tam = batch_tam
         self.n_epochs = n_epochs
     
-    def sigmoide(x):
+    def sigmoide(self,x):
         return expit(x)
 
     def normalization(self,X,y):
@@ -567,19 +568,22 @@ class RegresionLogisticaMiniBatch():
         
     def mini_batch(self,X,y):
         indices = list(range(len(X)))
-        indices = random.shuffle(indices)
+        random.shuffle(indices)
         list_X_batch = []
         list_y_batch = []
         for i in range(0, X.shape[0], self.batch_tam):
-            # Get pair of (X, y) of the current minibatch/chunk
-            list_X_batch.append(X[i:i + self.batch_tam])
-            list_y_batch.append(y[i:i + self.batch_tam])
+            list_X_batch.append(X[indices[i]:indices[i] + self.batch_tam])
+            list_y_batch.append(y[indices[i]:indices[i] + self.batch_tam])
         return list_X_batch, list_y_batch
+
+    def hipotesis(self,w,X):
+            h = np.dot(w,X)
+            return h 
 
     def entrena(self,X,y):
 
         X_normalizado = []
-        y_normalizado = []
+        y_normalizado = []           
         
         if self.normalizacion == True:
             X_normalizado,y_normalizado = self.normalization(X,y)
@@ -590,32 +594,45 @@ class RegresionLogisticaMiniBatch():
         n_epochs = self.n_epochs
         clases = np.unique(y)
         n_atributos = len(X_normalizado[0])
+        print(X_normalizado[0])
         n_ejemplos = len(X_normalizado)
-        w = np.zeros(shape=np.shape(X))
+        self.w = [random.uniform(-2,2) for _ in range(n_atributos)]
+        list_X_mini, list_y_mini = self.mini_batch(X_normalizado, y_normalizado)
         for n in range(n_epochs):
-            list_X_mini, list_y_mini = self.mini_batch(X, y)
             for i in range(len(list_X_mini)):
                 X_mini = [x for x in list_X_mini[i]]
                 y_mini = [y for y in list_y_mini[i]]
-                for j in range(len(X_mini)):
-                    for z in range(len(X_mini[j])):
-                        print(X_mini[j][z])
-                        if self.rate_decay == True:    
-                            w[j] += self.rate_d*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
-                        else:
-                            w[j] += self.rate*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
-                    #error_cuadratico = error_cuadratico_medio(x,y_train,w)
-        return w
+                for j in range(n_atributos):
+                    error = 0
+                    for z in range(len(X_mini)):
+                        ej = X_mini[z]
+                        error += y_mini[z]-self.sigmoide(self.hipotesis(self.w,ej))*X_mini[z][j]
+                    if self.rate_decay == True:
+                        self.w[j] = self.w[j] + self.rate_d*error
+                    else:
+                        self.w[j] = self.w[j] + self.rate*error
+                            #w[j] += self.rate_d*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
+                            #w[j] += self.rate*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
+        return self.w
 
-#     def clasifica_prob(self,ejemplo):
+    def clasifica_prob(self,ejemplo):
+        self.prob_reg = dict()
+        w = self.w
+        prob = 0
+        h = self.hipotesis(w,ejemplo)
+        for c in self.clases:
+            if c == 1:
+                prob = 1-self.sigmoide(h)
+                self.prob_reg[c] = prob 
+            prob = self.sigmoide(h)
+            self.prob_reg[c] = prob
+        return self.prob_reg
 
-#         ......
-
-#     def clasifica(self,ejemplo):
-
-#          ......
-
-
+    def clasifica(self,ejemplo):
+        if self.prob_reg == dict():
+            raise ClasificadorNoEntrenado
+        self.clasifica_prob(ejemplo)
+        return max(self.clasifica_prob(ejemplo), key=self.clasifica_prob(ejemplo).get)
 # Explicamos a continuación cada uno de estos elementos:
 
 
@@ -680,17 +697,37 @@ class RegresionLogisticaMiniBatch():
 
 # Ejemplo, usando los datos del cáncer de mama:
 
-# >>> Xe_cancer,Xp_cancer,ye_cancer,yp_cancer=particion_entr_prueba(X_cancer,y_cancer)
+Xe_cancer,Xp_cancer,ye_cancer,yp_cancer=particion_entr_prueba(carga_datos.X_cancer,carga_datos.y_cancer)
 
-# >>> lr_cancer=RegresionLogisticaMiniBatch(rate=0.1,rate_decay=True,normalizacion=True,n_epochs=1000)
+lr_cancer=RegresionLogisticaMiniBatch(rate=0.1,rate_decay=True,normalizacion=True,n_epochs=1000)
 
-# >>> lr_cancer.entrena(Xe_cancer,ye_cancer)
 
-# >>> rendimiento(lr_cancer,Xe_cancer,ye_cancer)
+lr_cancer.entrena(Xe_cancer,ye_cancer)
+print(lr_cancer.w)
+ej_cancer = [-0.2516073,  -0.24452643,  0.06809259,  2.97281055, -0.30838905, -0.3083329,
+ -0.30823277, -0.30842738, -0.308142,  -0.30853687, -0.30702247, -0.30584461,
+ -0.2986842,  -0.09860428, -0.30870293, -0.30866364, -0.30863133, -0.30868956,
+ -0.30867356, -0.30871369, -0.24053369, -0.22699581,  0.13484621,  4.34843406,
+ -0.30825679, -0.30793113, -0.30754964, -0.30825117, -0.30776331, -0.30847692]
+
+lr_cancer.clasifica_prob(ej_cancer)
+
+def rendimiento(clasificador, X, y):
+    # Hacemos predicciones con nuestro clasificador y nuestros datos X e y
+    predicciones = np.array([clasificador.clasifica(Xi) for Xi in X])
+    num_predicciones = len(predicciones)
+    # Predicciones que hemos acertado y fallado
+    bien = predicciones == y
+    # Numero de aciertos
+    num_bien = len(bien[bien == True])
+    return num_bien / num_predicciones
+
+print(rendimiento(lr_cancer,Xe_cancer,ye_cancer))
 # 0.9912280701754386
 
-# >>> rendimiento(lr_cancer,Xp_cancer,yp_cancer)
+print(rendimiento(lr_cancer,Xp_cancer,yp_cancer))
 # 0.9557522123893806
+
 
 # -----------------------------------------------------------------
 
