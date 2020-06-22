@@ -153,6 +153,8 @@
 import numpy as np
 import carga_datos
 import math
+from scipy.special import expit
+import random
 
 
 def particion_entr_prueba(X, y, test=0.20):
@@ -523,62 +525,39 @@ class RegresionLogisticaMiniBatch():
         self.normalizacion = normalizacion
         self.rate = rate
         self.rate_decay = rate_decay
-        self.rate_d = 0
-        self.rate_d += (rate)*(1/(1+n_epochs))
         self.batch_tam = batch_tam
         self.n_epochs = n_epochs
     
     def sigmoide(self,x):
         return expit(x)
 
-    def normalization(self,X,y):
-        
-        X_normalizado = np.zeros(shape=X.shape)
-        y_normalizado = np.zeros(shape=y.shape)
+    def normalization(self,X):
 
-        for i in range(len(X)):
-            suma_total = 0
-            suma_dist = 0
-            desv_tipica = 0
-            for j in range(len(X[i])):
-                suma_total += X[i][j]
-            media = suma_total/len(X[i])
-            for j in range(len(X[i])):
-                suma_dist += abs(X[i][j] - media)**2
-            desv_tipica = math.sqrt(suma_dist/len(X[i]))
-            for j in range(len(X[i])):
-                X_normalizado[i][j] = (X[i][j] - media)/desv_tipica
-        
-        suma_total = 0
-        suma_dist = 0
-        desv_tipica = 0
-        media = 0
-        
-        for i in range(len(y)):
-            suma_total += y[i]
-        media = suma_total/len(y)
+        n_ej = len(X)
+        sumas = np.sum(X, axis = 0)
+        medias = sumas/n_ej
+        distancia = np.sum(abs(medias - X)**2)
+        desv_tip = math.sqrt(distancia/n_ej)
+        x_norm = (X-medias)/desv_tip
 
-        for i in range(len(y)):          
-            suma_dist += abs(y[i]- media)**2
-        desv_tipica = math.sqrt(suma_dist/len(y))
+        return x_norm
 
-        for i in range(len(y)):
-            y_normalizado[i] = (y[i]- media)/desv_tipica
-        return X_normalizado, y_normalizado
-        
+    # TODO cabiar indices
     def mini_batch(self,X,y):
         indices = list(range(len(X)))
         random.shuffle(indices)
+        x_mezclado = [X[i] for i in indices] #LISTA nueva para elementos mezclados
+        y_mezclado = [y[i] for i in indices]
         list_X_batch = []
         list_y_batch = []
         for i in range(0, X.shape[0], self.batch_tam):
-            list_X_batch.append(X[indices[i]:indices[i] + self.batch_tam])
-            list_y_batch.append(y[indices[i]:indices[i] + self.batch_tam])
+            list_X_batch.append(x_mezclado[i:i + self.batch_tam])
+            list_y_batch.append(y_mezclado[i:i + self.batch_tam])
         return list_X_batch, list_y_batch
 
-    def hipotesis(self,w,X):
+    def hipotesis(self,w,X): #Prediccion
             h = np.dot(w,X)
-            return h 
+            return h
 
     def entrena(self,X,y):
 
@@ -586,7 +565,7 @@ class RegresionLogisticaMiniBatch():
         y_normalizado = []           
         
         if self.normalizacion == True:
-            X_normalizado,y_normalizado = self.normalization(X,y)
+            X_normalizado, y_normalizado = self.normalization(X), y
         else:
             X_normalizado,y_normalizado = X,y
 
@@ -594,38 +573,34 @@ class RegresionLogisticaMiniBatch():
         n_epochs = self.n_epochs
         clases = np.unique(y)
         n_atributos = len(X_normalizado[0])
-        print(X_normalizado[0])
         n_ejemplos = len(X_normalizado)
         self.w = [random.uniform(-2,2) for _ in range(n_atributos)]
         list_X_mini, list_y_mini = self.mini_batch(X_normalizado, y_normalizado)
         for n in range(n_epochs):
             for i in range(len(list_X_mini)):
-                X_mini = [x for x in list_X_mini[i]]
+                X_mini = [x for x in list_X_mini[i]] #TODO posible mejora
                 y_mini = [y for y in list_y_mini[i]]
                 for j in range(n_atributos):
                     error = 0
                     for z in range(len(X_mini)):
                         ej = X_mini[z]
                         error += y_mini[z]-self.sigmoide(self.hipotesis(self.w,ej))*X_mini[z][j]
-                    if self.rate_decay == True:
-                        self.w[j] = self.w[j] + self.rate_d*error
-                    else:
-                        self.w[j] = self.w[j] + self.rate*error
-                            #w[j] += self.rate_d*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
-                            #w[j] += self.rate*sum(y[z]-self.sigmoide(w*X_mini[j][z]))*X_mini[j]
+            self.w[j] = self.w[j] + self.rate * error
+            if self.rate_decay == True:
+                self.rate = (self.rate)*(1/(1+n))
         return self.w
 
-    def clasifica_prob(self,ejemplo):
+    def clasifica_prob(self, ejemplo):
         self.prob_reg = dict()
-        w = self.w
-        prob = 0
-        h = self.hipotesis(w,ejemplo)
         for c in self.clases:
             if c == 1:
-                prob = 1-self.sigmoide(h)
-                self.prob_reg[c] = prob 
-            prob = self.sigmoide(h)
-            self.prob_reg[c] = prob
+                h = self.hipotesis(np.negative(self.w), ejemplo)
+                prob = self.sigmoide(h)
+                self.prob_reg[c] = prob
+            else:
+                h = self.hipotesis(self.w, ejemplo)
+                prob = self.sigmoide(h)
+                self.prob_reg[c] = prob
         return self.prob_reg
 
     def clasifica(self,ejemplo):
@@ -659,7 +634,7 @@ class RegresionLogisticaMiniBatch():
 #    cada epoch. En concreto, si rate_decay es True, la tasa de
 #    aprendizaje que se usa en el n-ésimo epoch se debe de calcular
 #    con la siguiente fórmula: 
-#       rate_n= (rate_0)*(1/(1+n)) 
+#       rate_n= (rate)*(1/(1+n))
 #    donde n es el número de epoch, y rate_0 es la cantidad introducida
 #    en el parámetro rate anterior. Su valor por defecto es False. 
 
