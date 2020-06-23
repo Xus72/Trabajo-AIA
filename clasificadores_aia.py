@@ -521,33 +521,43 @@ class RegresionLogisticaMiniBatch():
                  rate=0.1,rate_decay=False,batch_tam=64,n_epochs=200,
                  pesos_iniciales=None):
 
-        self.clases = clases
-        self.normalizacion = normalizacion
-        self.rate = rate
-        self.rate_0 = rate
-        self.rate_decay = rate_decay
-        self.batch_tam = batch_tam
-        self.n_epochs = n_epochs
-        self.w = None
-        self.medias = None
-        self.desv_tip = None
+        self.clases = clases                   # Lista que contiene las clases del clasificador
+        self.normalizacion = normalizacion     # Variable que contiene el parámetro normalizacion
+        self.rate = rate                       # Variable que contiene el learning rate
+        self.rate_0 = rate                     # Learning rate inicial
+        self.rate_decay = rate_decay           # Variable que contiene el parámetro decay rate
+        self.batch_tam = batch_tam             # Variable que contiene el tamaño del batch
+        self.n_epochs = n_epochs               # Variable que contiene el número de epochs
+        self.w = None                          # Vector de pesos
+        self.medias = None                     # Variable que contiene la media de los valores
+                                               # de las características
+        self.desv_tip = None                   # Variable que contiene el valor de las desviación tipica
+        self.prob_reg = dict()                 # Variable que contiene las probabilidades
+                                               # de cada ejemplo
 
     def sigmoide(self,x):
         return expit(x)
 
+    # Funcion que normaliza el conjunto de entrenamiento
     def normalization(self,X):
+        # Hallamos la media de las características
         self.medias = np.mean(X, axis = 0)
+        # Calculamos la desviación tipica 
         self.desv_tip = np.std(X, axis = 0)
+        # El valor normalizado será (X - media)/desviacion tipica
         x_norm = (X-self.medias)/self.desv_tip
         return x_norm
-
+    # Divide el conjunto de entrenamiento en conjuntos más pequeños
     def mini_batch(self,X,y):
         indices = list(range(len(X)))
+        # Mezclamos los indices del conjunto de datos
         random.shuffle(indices)
         x_mezclado = [X[i] for i in indices]
         y_mezclado = [y[i] for i in indices]
         list_X_batch = []
         list_y_batch = []
+        # Creamos los conjuntos de entrenamiento iterando los indices + el tamaño del batch
+        # y los guardamos en una lista que contiene todos los batchs
         for i in range(0, X.shape[0], self.batch_tam):
             list_X_batch.append(np.array(x_mezclado[i:i + self.batch_tam]))
             list_y_batch.append(np.array(y_mezclado[i:i + self.batch_tam]))
@@ -557,70 +567,82 @@ class RegresionLogisticaMiniBatch():
     def hipotesis(self,w, X): #Prediccion
         h = np.dot(w, X)
         return h
-
+    
+    # Función que entrena el modelo
     def entrena(self, X, y):
-
+        # Comprobamos si hay que normalizar, en caso de que sea True, llamamos a la función
+        # que normaliza
         if self.normalizacion == True:
             X_normalizado, y_normalizado = self.normalization(X), y
         else:
             X_normalizado, y_normalizado = X, y
-        # n_epochs
+
         n_epochs = self.n_epochs
         n_atributos = len(X_normalizado[0])
+        # Creamos un vector de pesos con pesos aleatorios
         self.w = np.random.uniform(-1, 1, size=n_atributos)
         for n in range(n_epochs):
+            # Guardamos los minis batchs
             list_X_mini, list_y_mini = self.mini_batch(X_normalizado, y_normalizado)
             for j in range(len(list_X_mini)):
+                # Mini batch actual
                 X_mini = list_X_mini[j]
                 y_mini = list_y_mini[j]
                 acum = [0 for _ in range(n_atributos)]
                 for z in range(len(X_mini)):
+                    # Ejemplo del conjunto de entrenamiento
                     ej = X_mini[z]
+                    # Obtenemos el error a partir de un valor de y
+                    # al que le restamos la sigmoide. La función hipotesis calcula la predicción
                     error = y_mini[z] - self.sigmoide(self.hipotesis(self.w, ej))
                     for i in range(n_atributos):
+                        # Guardamos el error cometido en cada ejemplo
                         acum[i] += self.rate*error*ej[i]
                 for p in range(len(self.w)):
+                    # Actualizamos el peso con el error
                     self.w[p] = self.w[p] + acum[p]
             if self.rate_decay == True:
+                # Actualización del learning rate en cada epoch
                 self.rate = (self.rate_0) * (1 / (1 + n))
-        return self.w
-        # n_epochs
-        #n_epochs = self.n_epochs
-        #n_atributos = len(X_normalizado[0])
-        #self.w = [random.uniform(-1, 1) for _ in range(n_atributos)]
-        #for n in range(n_epochs):
-        #    list_X_mini, list_y_mini = self.mini_batch(X_normalizado, y_normalizado)
-        #    for i in range(n_atributos):
-        #        self.w = self.w + self.rate*np.sum([list_y_mini[j]-self.sigmoide(self.hipotesis(self.w, list_X_mini[j].transpose()))
-        #                                            *list_X_mini[j][:, i] for j in range(len(list_X_mini))])
-        #    if self.rate_decay == True:
-        #        self.rate = (self.rate) * (1 / (1 + n))
-
-
-
-
-
-
+        
+    # Función que clasifica cada ejemplo
     def clasifica_prob(self, ejemplo):
-        self.prob_reg = dict()
+        if self.w == []:
+            # Se devuelve una excepción si el modelo no ha sido entrenado.
+            raise ClasificadorNoEntrenado
+        # Comprobamos si hay que normalizar, en caso afirmativo, llamamos a la función que
+        # que normaliza
         if self.normalizacion == True:
+            # Ejemplo normalizado
             ejemplo = (ejemplo-self.medias)/self.desv_tip
         for c in self.clases:
             if c == 0:
+                # Calculo de la predicción de pertenecer a la clase 0
                 h = self.hipotesis(np.negative(self.w), ejemplo)
                 prob = self.sigmoide(h)
                 self.prob_reg[c] = prob
             else:
+                # Calculo de la predicción de pertenecer a la clase 1
                 h = self.hipotesis(self.w, ejemplo)
                 prob = self.sigmoide(h)
                 self.prob_reg[c] = prob
+        # Devolvemos un diccionario con la predicción para cada clase
         return self.prob_reg
 
+    # Función que clasifica el modelo
     def clasifica(self,ejemplo):
-        if self.prob_reg == dict():
+        # Se devuelve una excepción si el modelo no ha sido entrenado.
+        if self.w == []:
             raise ClasificadorNoEntrenado
+        # Entrenamos el ejemplo
         probs = self.clasifica_prob(ejemplo)
+        # Nos quedamos con la clase que tiene mayor probabilidad
         return max(probs, key=probs.get)
+
+class ClasificadorNoEntrenado(Exception):
+    def __str__(self):
+        return "Modelo no entrenado"
+
 # Explicamos a continuación cada uno de estos elementos:
 
 
@@ -685,17 +707,13 @@ class RegresionLogisticaMiniBatch():
 
 # Ejemplo, usando los datos del cáncer de mama:
 
-Xe_cancer,Xp_cancer,ye_cancer,yp_cancer=particion_entr_prueba(carga_datos.X_cancer,carga_datos.y_cancer)
+Xe_cancer,Xp_cancer,ye_cancer,yp_cancer=particion_entr_prueba(carga_datos.X_cancer,carga_datos.y_cancer,test=0.2)
 
-lr_cancer=RegresionLogisticaMiniBatch(rate=0.1,rate_decay=True,normalizacion=True,n_epochs=1000)
+lr_cancer=RegresionLogisticaMiniBatch(rate=0.1,rate_decay=True,normalizacion=True,n_epochs=1)
 
-
+# Ejemplo usado para clasificar
 lr_cancer.entrena(Xe_cancer,ye_cancer)
-ej_cancer = [-0.2516073,  -0.24452643,  0.06809259,  2.97281055, -0.30838905, -0.3083329,
- -0.30823277, -0.30842738, -0.308142,  -0.30853687, -0.30702247, -0.30584461,
- -0.2986842,  -0.09860428, -0.30870293, -0.30866364, -0.30863133, -0.30868956,
- -0.30867356, -0.30871369, -0.24053369, -0.22699581,  0.13484621,  4.34843406,
- -0.30825679, -0.30793113, -0.30754964, -0.30825117, -0.30776331, -0.30847692]
+ej_cancer = Xe_cancer[0]
 
 lr_cancer.clasifica_prob(ej_cancer)
 
@@ -737,6 +755,86 @@ print(rendimiento(lr_cancer,Xp_cancer,yp_cancer))
 
 # Mostrar el proceso realizado en cada caso, y los rendimientos finales obtenidos. 
 
+# Parametros que recibirá el clasificador
+tam_batch=[8,16,32,64]
+rate = [0.1,0.2,0.5,1]
+rate_decay = [False, True]
+normalizacion = [False, True]
+n_epochs = 1000
+
+
+def rendimiento_datasets(X,y,tam_batch,rate,rate_decay,normalizacion,n_epochs,test=0.2,x_test=None,y_test=None):
+    '''
+    :param x_train: ejemplos de entrenamiento
+    :param y_train: targets de entrenamiento
+    :param tam_batch: tamaño del batch
+    :param rate: Tasa de aprendizajo
+    :param rate_decay: indica si la tasa de aprendizaje disminuye
+    :param x_test: opcional. ejemplos de test
+    :param y_test: opcional. targets de test
+    :param test: proporcion que queremos para test y validacion
+    :return: rendimiento del modelo de regresion logistica sobre los datos.
+    '''
+    if x_test == None and y_test == None:
+        X_train, X_test, y_train,y_test = particion_entr_prueba(X,y,test=0.2)
+    else:
+        X_train = X, y_train = y, X_test = x_test, y_test = y_test
+
+    X_validacion, X_test, y_validacion, y_test = particion_entr_prueba(X_test,y_test,test=0.2)
+    # Variable en la que se va a guardar el valor del mejor rendimiento
+    rend_mejor = 0
+    # Variable en la que vamos a guardar la lista de los mejores parámetros
+    param = []
+    # Iteramos sobre los valores de los parametros
+    for i in tam_batch:
+        for j in rate:
+            for z in rate_decay:
+                for t in normalizacion:
+                    # Creamos el clasificador con los valores de los parametros
+                    lr = RegresionLogisticaMiniBatch(normalizacion=t,rate=j,rate_decay=z,batch_tam=i,n_epochs=n_epochs)
+                    lr.entrena(X_train,y_train)
+                    # Calculamos el rendimiento
+                    rend_actual = rendimiento(lr,X_validacion,y_validacion)
+                    # Si mejora el rendimiento actual al mejor, entramos dentro del bucle
+                    if rend_actual > rend_mejor:
+                        # Guardamos los parametros que han mejorado el rendimiento
+                        param = [t,j,z,i]
+                        # Guardamos el mejor rendimiento obtenido
+                        rend_mejor = rend_actual
+                        # Mejor clasificador
+                        lr_mejor = lr
+                        
+    print("El mejor valor de los parametros:")
+    print("Normalización: {}".format(param[0]))
+    print("Rate: {}".format(param[1]))
+    print("Rate decay: {}".format(param[2]))
+    print("Tamaño batch {}".format(param[3]))
+
+    print("Rendimiento sobre validación: ", rend_mejor)
+    print("Rendimiento sobre test: ", rendimiento(lr_mejor, X_test, y_test))
+
+print("\nRENDIMIENTO VOTOS")
+print("----------------------------")
+X_votos = carga_datos.X_votos
+y_votos = carga_datos.y_votos
+
+print(rendimiento_datasets(X_votos, y_votos,tam_batch,rate,rate_decay,normalizacion,n_epochs))
+
+print("\nRENDIMIENTO CANCER")
+print("----------------------------")
+X_cancer = carga_datos.X_cancer
+y_cancer = carga_datos.y_cancer
+
+print(rendimiento_datasets(X_cancer, y_cancer,tam_batch,rate,rate_decay,normalizacion,n_epochs))
+
+print("\nRENDIMIENTO CINE")
+print("----------------------------")
+X_train_cine = np.load('/home/infiniteloop/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/vect_train_text.npy')
+y_train_cine = np.load('/home/infiniteloop/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/y_train_text.npy')
+x_test_cine = np.load('/home/infiniteloop/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/vect_test_text.npy')
+y_test_cine = np.load('/home/infiniteloop/Documentos/AIA/Trabajo AIA/datos/imdb_sentiment/y_test_text.npy')
+
+print(rendimiento_datasets(X_train_cine,y_train_cine,tam_batch,rate,rate_decay,normalizacion,n_epochs,x_test_cine,y_test_cine))
 
 # =====================================
 # EJERCICIO 5: CLASIFICACIÓN MULTICLASE
